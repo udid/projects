@@ -12,7 +12,7 @@ int main()
 	int fd = open("/dev/goldenchar", O_RDONLY);
 
 	req.request_type = GOLDENCHAR_REQUEST_NEW_DEVICE;
-	strcpy(req.sel.NewDeviceRequest.device_name, "Hello");
+	strcpy(req.sel.NewDeviceRequest.device_name, "HelloBD");
 	req.sel.NewDeviceRequest.capacity = 10;
 	req.sel.NewDeviceRequest.minors = 1;
 	
@@ -20,6 +20,13 @@ int main()
 		printf("No can do...");
 
 	printf("Got back fd: %d", req.sel.NewDeviceRequest.fd);
+
+	int test_dev = open("/dev/HelloBD", O_RDWR);
+
+	if (test_dev < 0)
+		printf("Could not open the test device");
+	else
+		printf("YAY! Opened the device successfully");
 
 	return 0;
 }

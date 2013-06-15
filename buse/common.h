@@ -25,6 +25,7 @@ typedef struct GoldenRequest
 			char device_name[MAX_NAME];
 			int capacity; //In sector units
 			int minors;
+			int fd;
 		} NewDeviceRequest;
 
 		struct RemoveDeviceRequest

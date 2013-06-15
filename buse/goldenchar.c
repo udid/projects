@@ -12,7 +12,7 @@ static int handle_request(struct file* filep, GoldenRequest* request);
 static int setup_new_device(struct file* filep, GoldenRequest* request);
 static int remove_device(struct file* filep, GoldenRequest* request);
 
-static void golden_block_assign_fd(GoldenBlock* block);
+static void golden_block_assign_fd(GoldenBlock* block, kuid_t uid, pid_t pid);
 
 static void sanitize_request(GoldenRequest* request);
 
@@ -103,14 +103,15 @@ static int setup_new_device(struct file* filep, GoldenRequest* request)
 
 	golden_block_assign_fd(block, current_uid(), task_pid_nr(current));
 
-	if (down_interruptable(&_golden->golden_lock) == 0)
+	if (down_interruptible(&_golden->golden_lock) == 0)
 	{
 		list_add(&(block->list),&(_golden->gblock_list_head.list));
 		up(&_golden->golden_lock);
+		request->sel.NewDeviceRequest.fd = block->internal_fd;
 	}
 	else
 	{
-		golden_block_destroy(block);
+		//golden_block_destroy(block);
 		return -EINTR;
 	}
 
@@ -120,10 +121,11 @@ static int setup_new_device(struct file* filep, GoldenRequest* request)
 static void golden_block_assign_fd(GoldenBlock* block, kuid_t uid, pid_t pid)
 {
 	int max_fd = 1;
+	struct list_head* iter;
 
-	list_for_each(&iter, &(_golden->gblock_list_head.list))
+	list_for_each(iter, &(_golden->gblock_list_head.list))
 	{
-		GoldenBlock* temp = list_entry(&iter, GoldenBlock, list);
+		GoldenBlock* temp = list_entry(iter, GoldenBlock, list);
 
 		if (uid_eq(uid, temp->owner_uid) && (temp->owner_pid == pid) && (temp->internal_fd > max_fd))
 			max_fd = temp->internal_fd;

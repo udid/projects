@@ -54,6 +54,7 @@ int golden_block_create(char* name, int capacity, int minors, GoldenBlock** out)
 	}
 
 	block->owner_uid = current_uid();
+	printk(KERN_ALERT "golden_block_create: setting current uid to %d", block->owner_uid);
 	block->refcount = 0;
 
 	block->major = register_blkdev(0, name);
@@ -74,6 +75,7 @@ int golden_block_create(char* name, int capacity, int minors, GoldenBlock** out)
 		goto end;
 	}
 
+	block->gd->major = block->major;
 	block->gd->first_minor = 1;
 	block->gd->fops = &goldenblock_ops;
     block->gd->private_data = block;
@@ -87,7 +89,7 @@ int golden_block_create(char* name, int capacity, int minors, GoldenBlock** out)
 	    goto end;
 	}
 	
-	printk(KERN_ALERT "golden_block_create(): About to add_disk");
+	printk(KERN_ALERT "golden_block_create(): About to add_disk. minors=%d, major=%d, first_minor=%d", block->gd->minors, block->gd->major, block->gd->first_minor);
 
 	add_disk(block->gd);
 	*out = block;
