@@ -10,6 +10,8 @@
 #define DEVICE_NAME "sfusion"
 #define BUFFER_SIZE 1024
 #define WORD_SEPERATOR ' '
+#define NEWLINE_SEPERATOR '\n'
+#define EOL_SEPERATOR '\0'
 #define VALUE_SEPERATOR ','
  
 MODULE_LICENSE("Dual BSD/GPL");
@@ -84,11 +86,16 @@ static ssize_t get_next_word(const char *input, size_t length, char *output, con
 	char *found = strnchr(input, length, seperator);
 	int offset = 0;
 	if(found == NULL)
-		return offset;
-	// Get word's length.
-	offset = found - input;
+	{
+		offset = length - 1;
+	}
+	else
+	{
+		// Get word's length.
+		offset = found - input;
+	}
 	//printk(KERN_INFO "sfusion: input %s.\n", input);
-	//printk(KERN_INFO "sfusion: offset %d length %d seperator %c.\n", offset, length, WORD_SEPERATOR);
+	printk(KERN_INFO "sfusion: offset %d length %d seperator %c.\n", offset, length, seperator);
 	//printk(KERN_INFO "sfusion: found %s.\n", found);
 	// Copy the word.
 	memcpy(output, input, offset);
@@ -103,46 +110,70 @@ static bool strmatch(const char* str1, const char* str2)
 }
 
 static ssize_t device_write(struct file *fp, const char *buff, size_t length, loff_t *offset) {
-	char *ptr;
+	char *word;
+	char *val;
 	int word_length = 0;
+	int buff_location = 0;
+	int buff_length = length;
+	int val_length = 0;
+	int word_location = 0;
 	//printk(KERN_INFO "sfusion: text %s.\n", buff);
 	// Allocate space for the buffer.
-	ptr = kmalloc(length * sizeof(char), GFP_KERNEL);
+	word = kmalloc(length * sizeof(char), GFP_KERNEL);
 	// Get first word.
-	word_length = get_next_word(buff, length, ptr, WORD_SEPERATOR);
+	word_length = get_next_word(buff + buff_location, buff_length, word, WORD_SEPERATOR);
 	// Word wasn't found.
-	if(word_length == 0)
-			goto reading_failed;
+	if(word_length == buff_length)
+		goto reading_failed;
+	// Shorten buff length, because of the
+	// word.
+	buff_length -= word_length;
+	// Move buff's pointer to start from
+	// the next word.
+	buff_location += word_length;
 	// Check if word equals set.
-	if(strmatch(ptr, "set"))
+	if(strmatch(word, "set"))
 	{
-		//printk(KERN_INFO "sfusion: sub_text %s.\n", ptr);
 		// Move to the next word.
-		word_length = get_next_word(buff + word_length, length, ptr, WORD_SEPERATOR);
+		word_length = get_next_word(buff + buff_location, buff_length, word, WORD_SEPERATOR);
 		// Word wasn't found.
-		if(word_length == 0)
+		if(word_length == buff_length)
 			goto reading_failed;
+		// Shorten buff length, because of the
+		// word.
+		buff_length -= word_length;
+		// Move buff's pointer to start from
+		// the next word.
+		buff_location += word_length;
 		// Check if word equals devices.
-		if(strmatch(ptr, "devices"))
+		if(strmatch(word, "devices"))
 		{
-			//printk(KERN_INFO "sfusion: sub_text %s.\n", ptr);
-			word_length = get_next_word(buff + word_length, length, ptr, WORD_SEPERATOR);
+			// Move to the next word.
+			word_length = get_next_word(buff + buff_location, buff_length, word, NEWLINE_SEPERATOR);
 			// Word wasn't found.
-			if(word_length == 0)
+			if(word_length != buff_length)
 				goto reading_failed;
-			while(get_next_word(buff + word_length, length, ptr, VALUE_SEPERATOR) != 0)
+			val =  kmalloc(word_length * sizeof(char), GFP_KERNEL);
+			printk(KERN_INFO "sfusion: text %s.\n", word);
+			//val_length = get_next_word(word + word_location, word_length, val, VALUE_SEPERATOR);
+			//printk(KERN_INFO "sfusion: sub_text %s.\n", val);
+			do
 			{
-				printk(KERN_INFO "sfusion: sub_text %s.\n", ptr);
-			}
+				val_length = get_next_word(word + word_location, word_length, val, VALUE_SEPERATOR);
+				word_location += val_length;
+				word_length -= val_length;
+				printk(KERN_INFO "sfusion: sub_text %s location %d.\n", val, word_location);
+			} while(word_length > 0);
+			kfree(val);
 		}
 		else
 			goto reading_failed;
 	}
-	else if(strmatch(ptr, "add"))
+	else if(strmatch(word, "add"))
 	{
 
 	}
-	else if(strmatch(ptr, "remove"))
+	else if(strmatch(word, "remove"))
 	{
 
 	}
@@ -152,6 +183,6 @@ static ssize_t device_write(struct file *fp, const char *buff, size_t length, lo
 	reading_failed:
 	printk(KERN_INFO "sfusion: Illegal string was entered.\n");
 	success:
-	kfree(ptr);
+	kfree(word);
 	return length;
 }
