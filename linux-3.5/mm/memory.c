@@ -65,7 +65,12 @@
 #include <asm/tlbflush.h>
 #include <asm/pgtable.h>
 
+#include <linux/phase_shift.h>
+
 #include "internal.h"
+
+
+
 
 #ifndef CONFIG_NEED_MULTIPLE_NODES
 /* use the per-pgdat data instead for discontigmem - mbligh */
@@ -3446,6 +3451,12 @@ int handle_pte_fault(struct mm_struct *mm,
 
 	ptl = pte_lockptr(mm, pmd);
 	spin_lock(ptl);
+	// TODOOOOOO
+	if(phase_algorithm()->handle_fault)
+	{
+		phase_algorithm()->handle_fault(address);
+	}
+	// TODOOOOOO
 	if (unlikely(!pte_same(*pte, entry)))
 		goto unlock;
 	if (flags & FAULT_FLAG_WRITE) {
