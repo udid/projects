@@ -40,6 +40,7 @@
 #include <linux/irq_work.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/phase_shifts.h>
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
@@ -1345,6 +1346,14 @@ void update_process_times(int user_tick)
 {
 	struct task_struct *p = current;
 	int cpu = smp_processor_id();
+	
+	/* Timer callback - for phase shift detection algorithm. */
+	if(phase_shifts_algorithm->timer_callback)
+	{
+		phase_shifts_algorithm->timer_callback(p, user_tick);
+	}
+
+
 
 	/* Note: this timer irq context must be accounted for as well. */
 	account_process_tick(p, user_tick);

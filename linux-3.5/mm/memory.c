@@ -65,7 +65,7 @@
 #include <asm/tlbflush.h>
 #include <asm/pgtable.h>
 
-#include <linux/phase_shift.h>
+#include <linux/phase_shifts.h>
 
 #include "internal.h"
 
@@ -3451,12 +3451,14 @@ int handle_pte_fault(struct mm_struct *mm,
 
 	ptl = pte_lockptr(mm, pmd);
 	spin_lock(ptl);
-	// TODOOOOOO
-	if(phase_algorithm()->handle_fault)
+	
+	// Fault Callback Start - starting position, not sure it will still be here...
+	if(phase_shifts_algorithm->fault_callback)
 	{
-		phase_algorithm()->handle_fault(address);
+		phase_shifts_algorithm->fault_callback(address);
 	}
-	// TODOOOOOO
+	// Fault Callback End.
+	
 	if (unlikely(!pte_same(*pte, entry)))
 		goto unlock;
 	if (flags & FAULT_FLAG_WRITE) {

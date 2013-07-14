@@ -1,15 +1,13 @@
-#include <linux/phase_shift.h>
+#include <linux/phase_shifts.h>
 #include <linux/export.h>
 
-static struct phase_shift_algorithm_ops alg_ops = {
-	.handle_fault = NULL
+static struct phase_shift_algorithm_ops algorithm = {
+	.fault_callback = NULL,
+	.timer_callback = NULL
 };
 
-extern struct phase_shift_algorithm_ops* phase_algorithm(void)
-{
-	return &alg_ops;
-}
+struct phase_shift_algorithm_ops* phase_shifts_algorithm = &algorithm;
 
-EXPORT_SYMBOL(phase_algorithm);
+EXPORT_SYMBOL(phase_shifts_algorithm);
 
 

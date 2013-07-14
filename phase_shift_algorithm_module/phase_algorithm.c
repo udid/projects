@@ -4,7 +4,7 @@
 #include <linux/fs.h>
 #include <linux/slab.h>
 #include <linux/cdev.h>
-#include <linux/phase_shift.h>
+#include <linux/phase_shifts.h>
 
 
 /*
@@ -17,27 +17,35 @@
 
 MODULE_LICENSE("Dual BSD/GPL");
 
-static void my_handle_fault(unsigned long addr)
+static void my_fault_callback(unsigned long addr)
 {
-	char* k = (char*) kmalloc(sizeof(char), GFP_KERNEL);
-	*k = 'a';
-	printk(KERN_ALERT "written %c on 0x%p\n", *k, k);
-	kfree(k);
+	printk(KERN_ALERT "In fault callback, handle_pte_fault() .\n" );
+}
+
+static void my_timer_callback (struct task_struct* p, int user_tick)
+{
+	printk(KERN_ALERT "In timer callback, update_process_times() .\n" );
 }
 
 static int phase_shifts_init(void)
 {
-	struct phase_shift_algorithm_ops* ops = phase_algorithm();
-	ops->handle_fault = my_handle_fault;
-	printk(KERN_ALERT "device init\n");
+	// Init callbacks.
+	phase_shifts_algorithm->fault_callback = my_fault_callback;
+	phase_shifts_algorithm->timer_callback = my_timer_callback;
+	
+	
+	printk(KERN_ALERT "Phase shifts detection algorithm activated. \n");
 	return 0;
 }
 
 static void phase_shifts_exit(void)
 {
-	struct phase_shift_algorithm_ops* ops = phase_algorithm();
-	ops->handle_fault = NULL;
-	printk(KERN_ALERT "device exit\n");
+	// Deactivate callbacks.
+	phase_shifts_algorithm->fault_callback = NULL;
+	phase_shifts_algorithm->timer_callback = NULL;
+	
+	
+	printk(KERN_ALERT "Phase shifts detection algorithm deactivated. \n");
 }
 
 module_init(phase_shifts_init);
