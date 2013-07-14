@@ -3,7 +3,11 @@
 
 static struct phase_shift_algorithm_ops algorithm = {
 	.fault_callback = NULL,
-	.timer_callback = NULL
+	.timer_callback = NULL,
+	.init_phase_shift_scheme_callback = NULL,
+	.fork_callback = NULL,
+	.exec_callback = NULL,
+	.exit_callback = NULL
 };
 
 struct phase_shift_algorithm_ops* phase_shifts_algorithm = &algorithm;

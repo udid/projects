@@ -70,6 +70,7 @@
 #include <linux/khugepaged.h>
 #include <linux/signalfd.h>
 #include <linux/uprobes.h>
+#include <linux/phase_shifts.h>
 
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
@@ -1495,7 +1496,16 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	perf_event_fork(p);
 
 	trace_task_newtask(p, clone_flags);
-
+	/* Adds a callback for our module. */
+	
+	p->phase_shifts_private_data = NULL;
+	
+	if(phase_shifts_algorithm->fork_callback)
+	{
+		phase_shifts_algorithm->fork_callback(current, p, clone_flags);
+	}
+	
+	
 	return p;
 
 bad_fork_free_pid:

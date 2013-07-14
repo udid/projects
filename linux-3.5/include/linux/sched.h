@@ -1233,6 +1233,10 @@ struct task_struct {
 	unsigned int flags;	/* per process flags, defined below */
 	unsigned int ptrace;
 
+	/* Phase shift detection algorithm descriptor */ 
+	void* phase_shifts_private_data;
+	
+
 #ifdef CONFIG_SMP
 	struct llist_node wake_entry;
 	int on_cpu;
