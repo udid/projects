@@ -53,7 +53,6 @@
 #include <linux/oom.h>
 #include <linux/writeback.h>
 #include <linux/shm.h>
-#include <linux/phase_shifts.h>
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
@@ -907,12 +906,6 @@ void do_exit(long code)
 {
 	struct task_struct *tsk = current;
 	int group_dead;
-
-	/* Phase shift detection algorithm exit callback.*/
-	if(phase_shifts_algorithm->exit_callback)
-	{
-		phase_shifts_algorithm->exit_callback(tsk);
-	}
 
 	profile_task_exit(tsk);
 

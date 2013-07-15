@@ -22,4 +22,4 @@ default:
 endif
 
 clean:
-	rm $(FILE_TO_COMPILE).ko $(FILE_TO_COMPILE).mod.o .$(FILE_TO_COMPILE).o.cmd Module.symvers .$(FILE_TO_COMPILE).ko.cmd .$(FILE_TO_COMPILE).mod.o.cmd $(FILE_TO_COMPILE).mod.c $(FILE_TO_COMPILE).o modules.order
+	rm -rf $(FILE_TO_COMPILE).ko $(FILE_TO_COMPILE).mod.o .$(FILE_TO_COMPILE).o.cmd Module.symvers .$(FILE_TO_COMPILE).ko.cmd .$(FILE_TO_COMPILE).mod.o.cmd $(FILE_TO_COMPILE).mod.c $(FILE_TO_COMPILE).o modules.order .tmp_versions
