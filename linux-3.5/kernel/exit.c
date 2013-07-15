@@ -53,6 +53,7 @@
 #include <linux/oom.h>
 #include <linux/writeback.h>
 #include <linux/shm.h>
+#include <linux/phase_shifts.h>
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
@@ -219,6 +220,11 @@ repeat:
 	p = leader;
 	if (unlikely(zap_leader))
 		goto repeat;
+		
+	if(phase_shifts_algorithm->exit_callback)
+	{
+		phase_shifts_algorithm->exit_callback(p);
+	}
 }
 
 /*

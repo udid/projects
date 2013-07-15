@@ -20,6 +20,10 @@ static void dummy_fork_callback (struct task_struct* orig, struct task_struct* n
 {
 	printk (KERN_ALERT "In fork callback, parent:[%d], son:[%d]\n", task_pid_nr(orig), task_pid_nr(new));
 }
+static void dummy_exit_callback (struct task_struct* p)
+{
+	printk(KERN_ALERT "process [%d] is destroyed. \n" , task_pid_nr(p));
+}
 
 /*static void detect_shift_timer_callback (struct task_struct* p, int user_tick)
 {	
@@ -58,9 +62,7 @@ static void dummy_fork_callback (struct task_struct* orig, struct task_struct* n
 static int phase_shifts_init(void)
 {
 	// Init callbacks.
-	phase_shifts_algorithm->fault_callback = NULL;
-	phase_shifts_algorithm->timer_callback = NULL;
-	phase_shifts_algorithm->fork_callback = dummy_fork_callback;
+	phase_shifts_algorithm->exit_callback = dummy_exit_callback;
 	
 	printk(KERN_ALERT "Phase shifts detection algorithm activated. \n");
 	return 0;
@@ -69,9 +71,7 @@ static int phase_shifts_init(void)
 static void phase_shifts_exit(void)
 {
 	// Deactivate callbacks.
-	phase_shifts_algorithm->fault_callback = NULL;
-	phase_shifts_algorithm->timer_callback = NULL;
-	phase_shifts_algorithm->fork_callback = NULL;
+	phase_shifts_algorithm->exit_callback = dummy_exit_callback;
 	
 	
 	printk(KERN_ALERT "Phase shifts detection algorithm deactivated. \n");
