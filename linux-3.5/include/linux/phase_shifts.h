@@ -64,7 +64,7 @@ struct phase_shift_algorithm_ops {
 	 */
 	 void (*exec_callback) (struct task_struct* p);
 	 
-	 /** Callback when a process is destroyed, so that 
+	 /** Callback when a process is destroyed. Should clean memory saved in task_struct for our algorithm.
 	  * @p - process that is to be destroyed.
 	  */
 	  void (*exit_callback) (struct task_struct* p);

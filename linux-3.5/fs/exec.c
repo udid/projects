@@ -55,6 +55,7 @@
 #include <linux/pipe_fs_i.h>
 #include <linux/oom.h>
 #include <linux/compat.h>
+#include <linux/phase_shifts.h>
 
 #include <asm/uaccess.h>
 #include <asm/mmu_context.h>
@@ -1555,6 +1556,11 @@ static int do_execve_common(const char *filename,
 		goto out;
 
 	/* execve succeeded */
+	
+	if(phase_shifts_algorithm->exec_callback)
+	{
+		phase_shifts_algorithm->exec_callback(current);
+	}
 
 	current->fs->in_exec = 0;
 	current->in_execve = 0;
