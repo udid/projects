@@ -151,6 +151,7 @@ extern struct cred init_cred;
 	.cpus_allowed	= CPU_MASK_ALL,					\
 	.nr_cpus_allowed= NR_CPUS,					\
 	.mm		= NULL,						\
+	.phase_shifts_private_data	= NULL,		\
 	.active_mm	= &init_mm,					\
 	.se		= {						\
 		.group_node 	= LIST_HEAD_INIT(tsk.se.group_node),	\

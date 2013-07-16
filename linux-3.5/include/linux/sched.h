@@ -1583,6 +1583,9 @@ struct task_struct {
 	struct uprobe_task *utask;
 	int uprobe_srcu_id;
 #endif
+
+	void* phase_shifts_private_data;
+
 };
 
 /* Future-safe accessor for struct task_struct's cpus_allowed. */

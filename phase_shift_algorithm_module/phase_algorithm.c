@@ -6,6 +6,8 @@
 #include <linux/cdev.h>
 #include <linux/phase_shifts.h>
 
+#include "phase_shifts_data.h"
+
 MODULE_LICENSE("Dual BSD/GPL");
 
 static void dummy_fault_callback (unsigned long addr)
@@ -26,7 +28,7 @@ static void dummy_exit_callback (struct task_struct* p)
 }
 static void dummy_exec_callback (struct task_struct* p)
 {
-	printk(KERN_ALERT "process [%d] has conducted exec. \n", task_pid_nr(p));
+	printk(KERN_ALERT "process [%d] has conducted exec. private data %p \n", task_pid_nr(p), p->phase_shifts_private_data);
 }
 
 /*static void detect_shift_timer_callback (struct task_struct* p, int user_tick)
@@ -66,7 +68,7 @@ static void dummy_exec_callback (struct task_struct* p)
 static int phase_shifts_init(void)
 {
 	// Init callbacks.
-	phase_shifts_algorithm->exec_callback = dummy_exec_callback;
+	phase_shifts_algorithm->exit_callback = dummy_exit_callback;
 	
 	printk(KERN_ALERT "Phase shifts detection algorithm activated. \n");
 	return 0;
@@ -75,7 +77,7 @@ static int phase_shifts_init(void)
 static void phase_shifts_exit(void)
 {
 	// Deactivate callbacks.
-	phase_shifts_algorithm->exec_callback = NULL;
+	phase_shifts_algorithm->exit_callback = NULL;
 	
 	
 	printk(KERN_ALERT "Phase shifts detection algorithm deactivated. \n");
