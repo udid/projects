@@ -31,9 +31,12 @@ static void dummy_exec_callback (struct task_struct* p)
 	printk(KERN_ALERT "process [%d] has conducted exec. private data %p \n", task_pid_nr(p), p->phase_shifts_private_data);
 }
 
-/*static void detect_shift_timer_callback (struct task_struct* p, int user_tick)
+/**
+ * Timer callback - older version which should still be updated. Not tested yet!
+ */
+static void detect_shift_timer_callback (struct task_struct* p, int user_tick)
 {	
-	struct phase_shift_detection_scheme* scheme = p->pshift_scheme;
+	struct phase_shift_detection_scheme* scheme = (phase_shift_detection_scheme*) p->phase_shifts_private_data;
 	int detected = 0;
 	// Check if a scheme on this process is well defined, and tick was user time.
 	if(scheme && user_tick)
@@ -63,7 +66,7 @@ static void dummy_exec_callback (struct task_struct* p)
 			printk( KERN_ALERT "Phase shift detected for process %d\n", task_pid_nr(p) );
 		}
 	}
-}*/
+}
 
 static int phase_shifts_init(void)
 {
