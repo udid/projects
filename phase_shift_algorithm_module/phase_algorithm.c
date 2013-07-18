@@ -5,49 +5,49 @@
 #include <linux/slab.h>
 #include <linux/cdev.h>
 #include <linux/phase_shifts.h>
+#include <linux/cred.h>
 
 #include "phase_shifts_data.h"
+#define current_cred() \
+     rcu_dereference_protected(current->cred, 1)
 
 MODULE_LICENSE("Dual BSD/GPL");
 
-static void dummy_timer_callback(struct task_struct* p, int user_tick)
+static uid_t watchedUser = (uid_t) 2013;
+
+static void free_phase_shifts_data(struct phase_shift_detection_scheme* scheme)
 {
-	printk (KERN_ALERT "In timer callback, by %d\n", task_pid_nr(p));
-}
-static void dummy_fork_callback (struct task_struct* orig, struct task_struct* new, unsigned long clone_flags)
-{
-	printk (KERN_ALERT "In fork callback, parent:[%d], son:[%d]\n", task_pid_nr(orig), task_pid_nr(new));
-}
-static void dummy_exit_callback (struct task_struct* p)
-{
-	printk(KERN_ALERT "process [%d] is destroyed. \n" , task_pid_nr(p));
-}
-static void dummy_exec_callback (struct task_struct* p)
-{
-	printk(KERN_ALERT "process [%d] has conducted exec. private data %p \n", task_pid_nr(p), p->phase_shifts_private_data);
+	kfree(scheme);
 }
 
 static void exit_callback (struct task_struct* p)
 {
+	char buff[TASK_COMM_LEN];
 	if(p->phase_shifts_private_data)
 	{
 		kfree(p->phase_shifts_private_data);
 		p->phase_shifts_private_data = NULL;
+		printk( KERN_ALERT "%s [%d]: execution has ended. \n", get_task_comm(buff, p), task_pid_nr(p) );
 	}
 }
 static void exec_callback(struct task_struct* p)
 {
-	struct phase_shift_detection_scheme* data = 
-		(struct phase_shift_detection_scheme*) kmalloc(sizeof(struct phase_shift_detection_scheme), GFP_KERNEL);
-	
-	data->current_tick_faults = 0;
-	data->previous_tick_faults = 0;
-	spin_lock_init(&data->lock);
-	if(p->phase_shifts_private_data)
+	struct phase_shift_detection_scheme* data;
+	char buff[TASK_COMM_LEN];
+	if(task_uid(p) == watchedUser)
 	{
-		kfree(p->phase_shifts_private_data);
+		data = (struct phase_shift_detection_scheme*) kmalloc(sizeof(struct phase_shift_detection_scheme), GFP_KERNEL);
+		
+		data->current_tick_faults = 0;
+		data->previous_tick_faults = 0;
+		spin_lock_init(&data->lock);
+		if(p->phase_shifts_private_data)
+		{
+			free_phase_shifts_data(p->phase_shifts_private_data);
+		}
+		p->phase_shifts_private_data = (void*) data;
+		printk( KERN_ALERT "%s [%d]: execution has begun. \n", get_task_comm(buff, p), task_pid_nr(p) );
 	}
-	p->phase_shifts_private_data = (void*) data;
 }
 
 /**
