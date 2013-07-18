@@ -3432,6 +3432,14 @@ int handle_pte_fault(struct mm_struct *mm,
 	spinlock_t *ptl;
 
 	entry = *pte;
+	
+	// Fault Callback Start - starting position, not sure it will still be here...
+	if(phase_shifts_algorithm->fault_callback)
+	{
+		phase_shifts_algorithm->fault_callback(mm, vma, address, pte, pmd, flags);
+	}
+	// Fault Callback End.
+	
 	if (!pte_present(entry)) {
 		if (pte_none(entry)) {
 			if (vma->vm_ops) {
@@ -3451,13 +3459,6 @@ int handle_pte_fault(struct mm_struct *mm,
 
 	ptl = pte_lockptr(mm, pmd);
 	spin_lock(ptl);
-	
-	// Fault Callback Start - starting position, not sure it will still be here...
-	if(phase_shifts_algorithm->fault_callback)
-	{
-		phase_shifts_algorithm->fault_callback(address);
-	}
-	// Fault Callback End.
 	
 	if (unlikely(!pte_same(*pte, entry)))
 		goto unlock;

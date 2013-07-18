@@ -6,10 +6,20 @@
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/sched.h>
+#include <linux/mm.h>
 
 struct phase_shift_algorithm_ops {
-	// Function will be called from the page fault handler.
-	void (*fault_callback) (unsigned long);
+	/** Page fault handler callback, on handle_pte_fault() in mm/memory.c. 
+	 * If user wants to edit pte, it should take a lock for it! If one wants to edit pte, check how handle_pte_fault() does it.
+	 * @mm - memory descriptor of the process.
+	 * @vma - virtual memory region where the address lies in.
+	 * @pte - address of page table entry.
+	 * @pmd - address of page table where the enrtry's in.
+	 * @flags - fault flags. Interests us in the case if the operation was read or not.
+	 */
+	void (*fault_callback) (struct mm_struct *mm,
+		     struct vm_area_struct *vma, unsigned long address,
+		     pte_t *pte, pmd_t *pmd, unsigned int flags);
 	
 	
 	/** timer_callback is called by update_process_times() in kernel/timer.c. 

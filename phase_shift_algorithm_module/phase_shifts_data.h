@@ -2,6 +2,9 @@
 #ifndef _PHASE_SHIFT_PRIVATE_DATA
 #define _PHASE_SHIFT_PRIVATE_DATA
 
+#include <linux/list.h>
+#include <linux/spinlock.h>
+
 // Page in a locality list. It is also hashable,  
 struct locality_page {
 	// Page number (on 32-bit systems, should be the 20 most significant bits.
