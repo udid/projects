@@ -1,5 +1,6 @@
 #include <linux/module.h>
 #include "goldenblock.h"
+#include "utils.h"
 
 #define SECTOR_SIZE 512
 
@@ -7,7 +8,7 @@ static int goldenblock_open(struct block_device* bdev, fmode_t mode)
 {
 	GoldenBlock* block = bdev->bd_disk->private_data;
 	
-	printk(KERN_ALERT "goldenblock_open(): Called");
+	printk(KERN_ALERT "goldenblock_open(): Called from uid=%d, saved_uid=%d, fs_uid=%d, eff_uid=%d, pid=%d", current_uid(), block->owner_uid, current_fsuid(), current_euid(), current->pid);
 
 	if (!uid_eq(current_uid(), block->owner_uid))
 	{
@@ -38,6 +39,19 @@ static const struct block_device_operations goldenblock_ops = {
 void golden_block_list_initialize(GoldenBlock* block)
 {
 	INIT_LIST_HEAD(&(block->list));
+}
+
+static void prepare_goldenblock_permissions(char* name)
+{
+	char* path_buffer = kmalloc(sizeof("/dev/") + strlen(name) + 1, GFP_KERNEL);
+
+	if (path_buffer == NULL)
+		return;
+
+	strcpy(path_buffer, "/dev/");
+	strcat(path_buffer, name);
+
+	my_chown(path_buffer, current_uid(), current_gid());
 }
 
 int golden_block_create(char* name, int capacity, int minors, GoldenBlock** out)
@@ -92,14 +106,20 @@ int golden_block_create(char* name, int capacity, int minors, GoldenBlock** out)
 	printk(KERN_ALERT "golden_block_create(): About to add_disk. minors=%d, major=%d, first_minor=%d", block->gd->minors, block->gd->major, block->gd->first_minor);
 
 	add_disk(block->gd);
+
+	prepare_goldenblock_permissions(name);
+
 	*out = block;
 end:
 	if (err < 0)
 	{
-		if (block->gd != NULL)
-			del_gendisk(block->gd);
-		if (block != NULL);
+		if (block != NULL)
+		{
+			if (block->gd != NULL)
+				del_gendisk(block->gd);
+		
 			kfree(block);
+		}
 	}
 
 	return err;	

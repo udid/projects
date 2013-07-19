@@ -1,5 +1,6 @@
 #include <linux/cred.h>
 #include <linux/uidgid.h>
+#include <linux/syscalls.h>
 #include "golden.h"
 #include "goldenchar.h"
 #include "utils.h"
@@ -78,6 +79,8 @@ static void sanitize_request(GoldenRequest* request)
 	{
 		case GOLDENCHAR_REQUEST_NEW_DEVICE:
 			string_truncate(request->sel.NewDeviceRequest.device_name, sizeof(request->sel.NewDeviceRequest.device_name));
+			string_replace(request->sel.NewDeviceRequest.device_name, sizeof(request->sel.NewDeviceRequest.device_name), '/', '_');
+			string_replace(request->sel.NewDeviceRequest.device_name, sizeof(request->sel.NewDeviceRequest.device_name), '.', '_');
 			break;
 		default:
 			break;
@@ -215,6 +218,8 @@ int setup_goldenchar_device(GoldenGate* golden, GoldenChar* gchar)
 		retval = -ENODEV;
 		goto cleanup;
 	}
+
+	my_chmod(DEVFS_GOLDENCHAR_PATH, 0777, 1);
 
 cleanup:
 	if (retval < 0)

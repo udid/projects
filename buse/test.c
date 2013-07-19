@@ -16,6 +16,8 @@ int main()
 	req.sel.NewDeviceRequest.capacity = 10;
 	req.sel.NewDeviceRequest.minors = 1;
 	
+	printf("Current uid: %d, pid: %d\n", getuid(), getpid());
+
 	if (ioctl(fd, GOLDENCHAR_IOCTL_REQUEST, &req) != 0)
 		printf("No can do...");
 
@@ -23,10 +25,13 @@ int main()
 
 	int test_dev = open("/dev/HelloBD", O_RDWR);
 
+	printf("Got test_dev = %d\n", test_dev);
 	if (test_dev < 0)
-		printf("Could not open the test device");
+		printf("Could not open the test device\n");
 	else
-		printf("YAY! Opened the device successfully");
+		printf("YAY! Opened the device successfully\n");
+
+	printf("Current uid: %d\n", getuid());
 
 	return 0;
 }
