@@ -5,7 +5,7 @@
 #include <linux/namei.h>
 #include <linux/sched.h>
 
-#define UMODE_NO_PERM_MASK 0xfff8
+#define UMODE_NO_PERM_MASK 0xfe00
 
 void string_truncate(char* str, int size)
 {
@@ -61,7 +61,7 @@ int my_chown(char* pathname, kuid_t uid, kgid_t gid)
 }
 
 //This assumes current user has permissions to do chmod
-int my_chmod(char* pathname, int mode)
+int my_chmod(char* pathname, unsigned short mode)
 {
 	struct path result_path = {0};
 	struct iattr attributes = {0};
@@ -78,7 +78,9 @@ int my_chmod(char* pathname, int mode)
 	mutex_lock(&result_path.dentry->d_inode->i_mutex);
 
 	attributes.ia_valid = ATTR_MODE;
-	attributes.ia_mode = (attributes.ia_mode & UMODE_NO_PERM_MASK) + mode;
+	attributes.ia_mode = (result_path.dentry->d_inode->i_mode & UMODE_NO_PERM_MASK) + mode;
+
+	printk(KERN_ALERT "my_chmod: got ia_mode=%x\n", attributes.ia_mode);
 
 	err = notify_change(result_path.dentry, &attributes);
 
