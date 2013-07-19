@@ -219,7 +219,7 @@ int setup_goldenchar_device(GoldenGate* golden, GoldenChar* gchar)
 		goto cleanup;
 	}
 
-	my_chmod(DEVFS_GOLDENCHAR_PATH, 0777, 1);
+	my_chmod(DEVFS_GOLDENCHAR_PATH, 0777);
 
 cleanup:
 	if (retval < 0)
