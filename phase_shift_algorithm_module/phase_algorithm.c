@@ -17,8 +17,8 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 static uid_t WATCHED_USER = (uid_t) 2013;
 
-static unsigned long HASH_SIZE = 8;
-static unsigned long LOCALITY_SIZE = 32;
+static unsigned long HASH_SIZE = 32;
+static unsigned long LOCALITY_SIZE = 256;
 
 /** Function that extracts the page number out of an address.
  * @address - address from which we would like to extract page number.
@@ -102,11 +102,10 @@ static void phase_shifts_data_init (struct phase_shift_detection_scheme* scheme)
 	scheme->locality_list_size = 0;
 	scheme->locality_max_size = LOCALITY_SIZE;
 	scheme->hash_table_size = HASH_SIZE;
-	scheme->current_tick_faults = 0;
+	atomic_set(&scheme->current_tick_faults, 0);
 	scheme->previous_tick_faults = 0;
 	scheme->pool = (struct locality_page*) kmalloc(scheme->locality_max_size * sizeof(struct locality_page), GFP_KERNEL);
 	scheme->free_index = 0;
-	spin_lock_init(&scheme->lock);
 	
 }
 static void free_phase_shifts_data (struct phase_shift_detection_scheme* scheme)
@@ -149,9 +148,7 @@ static void add_this_page(struct mm_struct* mm, unsigned long address, struct ph
 	
 	struct locality_page* page;
 	
-	spin_lock_irq(&scheme->lock);
-	scheme->current_tick_faults++;
-	spin_unlock_irq(&scheme->lock);
+	atomic_inc(&scheme->current_tick_faults);
 	
 	page = hash_find(scheme->locality_hash_tbl, scheme->hash_table_size, get_page_number(address));
 	if(page) // If page already in lists.
@@ -254,26 +251,19 @@ static void timer_callback (struct task_struct* p, int user_tick)
 	char buff[TASK_COMM_LEN];
 	// Check if a scheme on this process is well defined, and tick was user time.
 	int detected = 0;
+	int current_faults;
 	if(scheme)
 	{
-		/* 
-		 * Locking the phase shift detection scheme associated with current.
-		 */
-		
-		spin_lock(&scheme->lock); 
-		
+
+		current_faults = atomic_xchg(&scheme->current_tick_faults, 0);
 		// Check for a tick - if previous tick had no faults while current one did.
-		if(!(scheme->previous_tick_faults) && scheme->current_tick_faults > 0)
+		if(!(scheme->previous_tick_faults) && current_faults > 0)
 		{
 			detected = 1;
 		}
 		
 		// Resetting counters. 
-		scheme->previous_tick_faults = scheme->current_tick_faults;
-		scheme->current_tick_faults = 0;
-		
-		
-		spin_unlock(&scheme->lock);
+		scheme->previous_tick_faults = current_faults;
 		
 		if(detected)
 		{

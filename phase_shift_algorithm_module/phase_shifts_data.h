@@ -4,6 +4,7 @@
 
 #include <linux/list.h>
 #include <linux/spinlock.h>
+#include <asm/atomic.h>
 
 // Page in a locality list. It is also hashable,  
 struct locality_page {
@@ -24,8 +25,8 @@ struct phase_shift_detection_scheme {
 	unsigned long locality_max_size;
 	
 	/* Counters to save current tick and previous tick faults. */
-	unsigned long current_tick_faults;
-	unsigned long previous_tick_faults;
+	atomic_t current_tick_faults;
+	int previous_tick_faults;
 	
 	/* Pool of locality page structs. This is used so we won't need to allocate in page fault handler anything. */
 	struct locality_page* pool;
@@ -33,9 +34,6 @@ struct phase_shift_detection_scheme {
 	 * A previously allocated page.
 	 */
 	unsigned long free_index; 
-	
-	/* Lock for accessing this struct. */
-	spinlock_t lock; 
 	
 };
 
