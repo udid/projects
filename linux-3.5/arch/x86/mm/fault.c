@@ -979,9 +979,9 @@ access_error(unsigned long error_code, struct vm_area_struct *vma)
 		return 0;
 	}
 
-	/* read, present: */
+	/* read, present: 
 	if (unlikely(error_code & PF_PROT))
-		return 1;
+		return 1;*/
 
 	/* read, not present: */
 	if (unlikely(!(vma->vm_flags & (VM_READ | VM_EXEC | VM_WRITE))))

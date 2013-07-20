@@ -17,7 +17,7 @@ struct phase_shift_algorithm_ops {
 	 * @pmd - address of page table where the enrtry's in.
 	 * @flags - fault flags. Interests us in the case if the operation was read or not.
 	 */
-	void (*fault_callback) (struct mm_struct *mm,
+	int (*fault_callback) (struct mm_struct *mm,
 		     struct vm_area_struct *vma, unsigned long address,
 		     pte_t *pte, pmd_t *pmd, unsigned int flags);
 	
