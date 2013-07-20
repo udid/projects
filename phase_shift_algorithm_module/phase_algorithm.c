@@ -17,8 +17,8 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 static uid_t WATCHED_USER = (uid_t) 2013;
 
-static unsigned long HASH_SIZE = 32;
-static unsigned long LOCALITY_SIZE = 64;
+static unsigned long HASH_SIZE = 8;
+static unsigned long LOCALITY_SIZE = 32;
 
 /** Function that extracts the page number out of an address.
  * @address - address from which we would like to extract page number.
@@ -82,22 +82,18 @@ static void swap_out_page(struct locality_page* page, struct mm_struct* mm)
 	entry = *ptep;
 	entry = pte_clear_flags(entry, _PAGE_USER);
 	set_pte(ptep, entry);
-	update_mmu_cache(vma, address, ptep);
 	pte_unmap_unlock(ptep, ptl);
 }
 
-static struct locality_page* alloc_locality_page(unsigned long address)
+static struct locality_page* alloc_locality_page(struct phase_shift_detection_scheme* scheme, unsigned long address)
 {
-	struct locality_page* page = (struct locality_page *) kmalloc(sizeof(struct locality_page), GFP_KERNEL);
+	struct locality_page* page = &scheme->pool[scheme->free_index];
+	scheme->free_index++;
 	page->nm_page = get_page_number(address);
 	INIT_HLIST_NODE(&page->hash_list);
 	INIT_LIST_HEAD(&page->locality_list);
 	
 	return page;
-}
-static void free_locality_page(struct locality_page* page)
-{
-	kfree(page);
 }
 static void phase_shifts_data_init (struct phase_shift_detection_scheme* scheme)
 {
@@ -108,6 +104,8 @@ static void phase_shifts_data_init (struct phase_shift_detection_scheme* scheme)
 	scheme->hash_table_size = HASH_SIZE;
 	scheme->current_tick_faults = 0;
 	scheme->previous_tick_faults = 0;
+	scheme->pool = (struct locality_page*) kmalloc(scheme->locality_max_size * sizeof(struct locality_page), GFP_KERNEL);
+	scheme->free_index = 0;
 	spin_lock_init(&scheme->lock);
 	
 }
@@ -115,6 +113,7 @@ static void free_phase_shifts_data (struct phase_shift_detection_scheme* scheme)
 {
 	// This function also removes the locality pages themselves, thus removing the locality list.
 	free_hash_list(scheme->locality_hash_tbl, scheme->hash_table_size);
+	kfree(scheme->pool);
 	kfree(scheme);
 }
 
@@ -150,7 +149,6 @@ static void add_this_page(struct mm_struct* mm, unsigned long address, struct ph
 	
 	struct locality_page* page;
 	spin_lock(&scheme->lock);
-		
 	page = hash_find(scheme->locality_hash_tbl, scheme->hash_table_size, get_page_number(address));
 	if(page) // If page already in lists.
 	{
@@ -165,20 +163,25 @@ static void add_this_page(struct mm_struct* mm, unsigned long address, struct ph
 			/* Getting the page to be "swapped out". */
 			page = list_entry(scheme->locality_list.prev, struct locality_page, locality_list); 
 			/* Deletes swapped out page to */
-			list_del(&page->locality_list);
-			hlist_del(&page->hash_list);
+			list_del_init(&page->locality_list);
+			hlist_del_init(&page->hash_list);
 			
 			/* In this case, makes sure that a next reference causes a page fault with swap_out_page, and frees the page's space. */
 			swap_out_page(page, mm);
-			free_locality_page(page);
-			scheme->locality_list_size--;
+			
+			page->nm_page = get_page_number(address);
+
+			list_add(&page->locality_list, &scheme->locality_list);
+			hash_add(scheme->locality_hash_tbl,  scheme->hash_table_size, page, page->nm_page);
 		}
-		
-		// Adds our new page to the list and hash table.
-		page = (struct locality_page*) alloc_locality_page(address);
-		list_add(&page->locality_list, &scheme->locality_list);
-		hash_add(scheme->locality_hash_tbl,  scheme->hash_table_size, page, page->nm_page);
-		scheme->locality_list_size++;
+		else
+		{
+			// Adds our new page to the list and hash table.
+			page = (struct locality_page*) alloc_locality_page(scheme, address);
+			list_add(&page->locality_list, &scheme->locality_list);
+			hash_add(scheme->locality_hash_tbl,  scheme->hash_table_size, page, page->nm_page);
+			scheme->locality_list_size++;
+		}
 	}
 	scheme->current_tick_faults++;
 	spin_unlock(&scheme->lock);

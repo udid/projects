@@ -63,19 +63,18 @@ static inline void hash_del(struct locality_page* page)
  */ 
 static inline void free_hash_list(struct hlist_head* hash_tbl, unsigned long hash_size)
 {
-	unsigned long i;
-	struct hlist_node* tmp;
-	struct hlist_node* ptr;
-	struct locality_page* page;
-	for(i = 0UL; i < hash_size; i++)
-	{
-		hlist_for_each_entry_safe(page, ptr, tmp, &hash_tbl[i], hash_list)
-		{
-			hlist_del(&page->hash_list);
-			list_del(&page->locality_list);
-			kfree(page);
-		}
-	}
+	//unsigned long i;
+	//struct hlist_node* tmp;
+	//struct hlist_node* ptr;
+	//struct locality_page* page;
+	//for(i = 0UL; i < hash_size; i++)
+	//{
+		//hlist_for_each_entry_safe(page, ptr, tmp, &hash_tbl[i], hash_list)
+		//{
+			//hlist_del(&page->hash_list);
+			//list_del(&page->locality_list);
+		//}
+	//}
 	kfree(hash_tbl);
 }
 

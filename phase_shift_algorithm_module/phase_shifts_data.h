@@ -27,6 +27,13 @@ struct phase_shift_detection_scheme {
 	unsigned long current_tick_faults;
 	unsigned long previous_tick_faults;
 	
+	/* Pool of locality page structs. This is used so we won't need to allocate in page fault handler anything. */
+	struct locality_page* pool;
+	/* Index where the page is free to use. When pool is full, it is promised that the handler won't try to use free_index, as the list is full thus it will use
+	 * A previously allocated page.
+	 */
+	unsigned long free_index; 
+	
 	/* Lock for accessing this struct. */
 	spinlock_t lock; 
 	
