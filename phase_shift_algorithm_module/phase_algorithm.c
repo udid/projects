@@ -17,8 +17,8 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 static uid_t WATCHED_USER = (uid_t) 2013;
 
-static unsigned long HASH_SIZE = 32;
-static unsigned long LOCALITY_SIZE = 256;
+static unsigned long HASH_SIZE = 16;
+static unsigned long LOCALITY_SIZE = 16;
 
 /** Function that extracts the page number out of an address.
  * @address - address from which we would like to extract page number.
@@ -106,6 +106,7 @@ static void phase_shifts_data_init (struct phase_shift_detection_scheme* scheme)
 	scheme->previous_tick_faults = 0;
 	scheme->pool = (struct locality_page*) kmalloc(scheme->locality_max_size * sizeof(struct locality_page), GFP_KERNEL);
 	scheme->free_index = 0;
+	scheme->number_of_ticks = 0;
 	
 }
 static void free_phase_shifts_data (struct phase_shift_detection_scheme* scheme)
@@ -186,10 +187,6 @@ static void add_this_page(struct mm_struct* mm, unsigned long address, struct ph
 			page = (struct locality_page*) alloc_locality_page(scheme, address);
 			list_add(&page->locality_list, &scheme->locality_list);
 			hash_add(scheme->locality_hash_tbl,  scheme->hash_table_size, page, page->nm_page);
-			if(!(page == hash_find(scheme->locality_hash_tbl, scheme->hash_table_size, page->nm_page)))
-			{
-				//printk( KERN_ALERT "FUCK MY LIFE. \n");
-			}
 			scheme->locality_list_size++;
 		}
 	}
@@ -215,7 +212,6 @@ static int fault_callback (struct mm_struct *mm,
 		if( !pte_present(entry) && (vma->vm_flags & VM_EXEC)) // Page not in memory, and the memory region is executable - 1st case. 
 			// Fault was read, page is present in memory, and area is executable.
 		{
-			//printk(KERN_ALERT "PAGE FAULT MOTHERFUCKER 1st. %p \n", (void*)get_page_number(address));
 			add_this_page(mm, address, scheme);
 			return 0;
 		}
@@ -224,7 +220,6 @@ static int fault_callback (struct mm_struct *mm,
 			
 		if(pte_present(entry) && (vma->vm_flags & VM_EXEC) && (!(flags & FAULT_FLAG_WRITE)))
 		{
-			//printk(KERN_ALERT "PAGE FAULT MOTHERFUCKER 2nd. %p \n", (void*)get_page_number(address));
 			fix_pte = 0;
 			add_this_page(mm, address, scheme);
 
@@ -248,7 +243,7 @@ static int fault_callback (struct mm_struct *mm,
 static void timer_callback (struct task_struct* p, int user_tick)
 {	
 	struct phase_shift_detection_scheme* scheme = (struct phase_shift_detection_scheme*) p->phase_shifts_private_data;
-	char buff[TASK_COMM_LEN];
+	//char buff[TASK_COMM_LEN];
 	// Check if a scheme on this process is well defined, and tick was user time.
 	int detected = 0;
 	int current_faults;
@@ -265,9 +260,12 @@ static void timer_callback (struct task_struct* p, int user_tick)
 		// Resetting counters. 
 		scheme->previous_tick_faults = current_faults;
 		
+		scheme->number_of_ticks++;
+		// Used for monitoring purposes...
+		printk(KERN_ALERT "%lu,%d\n", scheme->number_of_ticks, scheme->previous_tick_faults);
 		if(detected)
 		{
-			printk( KERN_ALERT "%s[%d]: phase shift detected. \n", get_task_comm(buff, p), task_pid_nr(p) );
+			//printk( KERN_ALERT "%s[%d]: phase shift detected. \n", get_task_comm(buff, p), task_pid_nr(p) );
 		}
 	}
 }

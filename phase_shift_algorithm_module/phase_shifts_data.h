@@ -35,6 +35,8 @@ struct phase_shift_detection_scheme {
 	 */
 	unsigned long free_index; 
 	
+	unsigned long number_of_ticks;
+	
 };
 
 #endif /* _PHASE_SHIFT_PRIVATE_DATA */
