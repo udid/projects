@@ -1,13 +1,6 @@
-#include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/slab.h>
-#include <linux/fs.h>
-#include <linux/types.h>
-#include <linux/errno.h>
-#include <asm/uaccess.h>
-#include <linux/cdev.h>
-#include <linux/netdevice.h>
 #include "sfusion.h"
+
+//struct iphdr *ip_hdr;
 
 module_init(device_init);
 module_exit(device_exit);
@@ -15,10 +8,15 @@ module_exit(device_exit);
 /*
  * A struct that holds a device name
  * and a link to the list header.
+ * amount of sends through this second
+ * amount of sends last seconde
  */
 struct device_list {
 	struct net_device *dev;
 	struct list_head list;
+
+	int amount_sent;
+	int last_sec_amount_sent;
 };
 /*
  * A struct that holds a rule
@@ -50,6 +48,11 @@ static struct file_operations fops = {
 	.open = device_open,
 	.release = device_release
 };
+/*
+ * struct that holds the timer
+*/
+static struct timer_list bandwidth_timer;
+
 /* Will be initialized with device's major */
 static int device_major = -1;
 /* Holds the amount of devices that were opened */
@@ -61,11 +64,15 @@ static rule_list myrules;
 /* Counter for the rules */
 static int num_rules = 0;
 static int for_eof = 0;
+
  
 /**
  * device_init		-	Initialize the char device.
  */ 
 int device_init(void) {
+	int op_result=0;
+	int sec_as_jiffies=usecs_to_jiffies(1);
+
 	// Set a new available device major.
 	device_major = register_chrdev(0, DEVICE_NAME, &fops);
 	// Device major wasn't set.
@@ -74,14 +81,281 @@ int device_init(void) {
 		return device_major;
 	}
 	printk(KERN_INFO "sfusion: sfusion loaded with major %d.\n", device_major);
+
+	//initialise timer
+	setup_timer(&bandwidth_timer, set_bandwith, 0);
+	mod_timer(&bandwidth_timer, sec_as_jiffies+jiffies);
+
+	//intialise netfilter hooks
+	op_result=init_netfilter_loadbalancer_hook();
+	if(op_result!=0)
+		return op_result;
+
 	return 0;
 }
+/**
+ * this is the timers callback method
+ * //switch devices past second packets counter and reset current
+**/
+void set_bandwith(unsigned long data){
+	struct device_list *device_iter=&mydevs;
+	while(device_iter!=NULL){
+		device_iter->last_sec_amount_sent=device_iter->amount_sent;
+		device_iter->amount_sent=0;
+		device_iter=(struct device_list *)device_iter->list.next;
+	}
+}
+
+/**
+ * the post routing hook set to netfilter
+**/
+static struct nf_hook_ops nfho_post =
+{
+	.hook = loadbalance_hook,
+	.hooknum = NF_INET_POST_ROUTING,
+	.pf = NFPROTO_IPV4,
+	.priority = NF_IP_PRI_FIRST,
+};
+/**
+ * check if loadbalncing nedded and load balance when needed
+**/
+unsigned int loadbalance_hook
+	(unsigned int hooknum,
+	struct sk_buff *skb,
+	const struct net_device *in,
+	const struct net_device *out,
+	int (*okfn)(struct sk_buff *))
+{
+	struct sk_buff *new_skb=NULL;
+	struct net_device *new_device=NULL;
+
+	if(!should_loadbalance(skb))
+	{
+		update_device_counters(skb);
+		return NF_ACCEPT;
+	}
+
+	//start load balancing
+	printk(KERN_DEBUG "loadbalancing needed");
+	new_skb=skb_copy(skb,GFP_ATOMIC);
+	if(new_skb==NULL)
+	{
+		printk(KERN_WARNING "could not copy socket buffer\n");
+		goto send_no_loadbalancing;
+	}
+
+	new_device=get_new_device();
+	if(new_device==NULL)
+	{
+		printk(KERN_WARNING "could not generate device\n");
+		goto free_skb;
+	}
+
+	new_skb->dev=new_device;
+	dev_queue_xmit(new_skb);
+	update_device_counters(new_skb);
+	printk(KERN_DEBUG "sending with loadbalancing");
+	return NF_DROP;
+
+//on errors send as normal packet
+free_skb:
+	if(new_skb!=NULL)
+		kfree_skb(new_skb);
+send_no_loadbalancing:
+	printk(KERN_DEBUG "sending without loadbalancing\n");
+	update_device_counters(skb);
+	return NF_ACCEPT;
+}
+/*struct nf_hook_ops nfho_post =
+{
+	.hook = nf_hookfn2,
+	.hooknum = NF_INET_POST_ROUTING,
+	.pf = NFPROTO_IPV4,
+	.priority = NF_IP_PRI_FIRST,
+};*/
+int init_netfilter_loadbalancer_hook(void)
+{
+	printk(KERN_INFO "registering  hook");
+	return nf_register_hook(&nfho_post);
+}
+/**
+ * thif function return true if the given packet should be load balanced
+ * skb is the packet to check
+**/
+bool should_loadbalance(struct sk_buff *skb)
+{
+	struct device_list* dev_iter=&mydevs;
+	bool dev_exists=false;
+	struct rule_list* rule_iter=&myrules;
+	struct iphdr *ip_hdr=NULL;
+	struct tcphdr* tcp_header = NULL;
+	struct udphdr* udp_header = NULL;
+	int packet_srcport=0;
+	int packet_destport=0;
+	char *subnet_pointer=NULL;
+	int subnet_part=0;
+	unsigned int subnet=0;
+	int cidr=0;
+	char* str_subnet_part=NULL;
+	unsigned int ip=0;
+
+	//check if device should be load balanced
+	do
+	{
+		if(strncmp(skb->dev->name, dev_iter->dev->name, IFNAMSIZ)==0)
+			dev_exists=true;
+		
+		dev_iter=(struct device_list *)dev_iter->list.next;
+	}while(dev_iter!=&mydevs && dev_iter!=NULL);
+
+	if(!dev_exists)
+		return false;
+
+	//check if the packet meets any rule requirement
+	for(;rule_iter!=&myrules && rule_iter!=NULL;rule_iter=(struct rule_list *)rule_iter->list.next)
+	{
+		ip_hdr=(struct iphdr*)skb_network_header(skb);
+		
+		//check protocol and port
+		if(rule_iter->protocol!=NULL)
+		{
+			if(ip_hdr->protocol==IPPROTO_UDP
+				&& strncmp(rule_iter->protocol,"udp",3)!=0
+				&& strncmp(rule_iter->protocol,"UDP",3)!=0)
+					continue;
+			if(ip_hdr->protocol==IPPROTO_TCP
+				&& strncmp(rule_iter->protocol,"tcp",3)!=0
+				&& strncmp(rule_iter->protocol,"TCP",3)!=0)
+					continue;
+
+			//check port and side
+			if(rule_iter->port_type!=NULL && rule_iter->ports!=NULL)
+			{
+				if(ip_hdr->protocol==IPPROTO_TCP)
+				{
+					tcp_header = (struct tcphdr*)skb_transport_header(skb);//by internet sometimes incorrect and can use (struct tcphdr*)((char *)ip_hdr+ip_hdr->ihl*4) instead
+					packet_srcport=tcp_header->source;
+					packet_destport=tcp_header->dest;
+				}
+				else if(ip_hdr->protocol==IPPROTO_UDP)
+				{
+					udp_header = (struct udphdr*)skb_transport_header(skb);
+					packet_srcport=udp_header->source;
+					packet_destport=udp_header->dest;
+				}
+				else
+					continue;
+
+				//check every port exists with correct side
+				if(strncmp(rule_iter->port_type,"src",3)==0)
+					{}
+				else
+					{}
+			}
+		}
+
+		//check subnet
+		if(rule_iter->subnet!=NULL)
+		{
+			//build subnet and cidr
+			subnet_pointer=rule_iter->subnet;
+
+    		str_subnet_part = strsep(&subnet_pointer, "./");
+			if(kstrtoint(str_subnet_part,10,&subnet_part)!=0)
+				continue;
+			subnet|=subnet_part<<24;
+
+			str_subnet_part = strsep(&subnet_pointer, "./");
+			if(kstrtoint(str_subnet_part,10,&subnet_part)!=0)
+				continue;
+			subnet|=subnet_part<<16;
+
+			str_subnet_part = strsep(&subnet_pointer, "./");
+			if(kstrtoint(str_subnet_part,10,&subnet_part)!=0)
+				continue;
+			subnet|=subnet_part<<8;
+
+			str_subnet_part = strsep(&subnet_pointer, "./");
+			if(kstrtoint(str_subnet_part,10,&subnet_part)!=0)
+				continue;
+			subnet|=subnet_part;
+
+			str_subnet_part = strsep(&subnet_pointer, "./");
+			if(kstrtoint(str_subnet_part,10,&cidr)!=0)
+				continue;
+
+			subnet=subnet>>cidr;
+			subnet=subnet<<cidr;
+
+			//get ip
+			if(strncmp(rule_iter->subnet_type,"src",3)==0)
+				ip=ip_hdr->saddr;
+			else
+				ip=ip_hdr->daddr;
+			
+			ip>>=cidr;
+			ip<<=cidr;
+			
+			if(ip!=subnet)
+				continue;
+		}
+
+		return true;
+	}
+
+	return false;
+}
+/**
+ * update that a packet went through this device
+**/
+static void update_device_counters(struct sk_buff *skb){
+	struct device_list* dev_iter=&mydevs;
+	while(dev_iter!=NULL){
+		if(strncmp(skb->dev->name, dev_iter->dev->name, IFNAMSIZ)==0){
+			dev_iter->amount_sent++;
+			break;
+		}
+	}
+}
+/**
+ * get the new loadbalanced net device
+**/
+struct net_device* get_new_device(void)
+{
+	int random=0;
+	struct device_list* dev_iter=&mydevs;
+	int sum_packets=0;
+
+	//sum_packets
+	while(dev_iter!=NULL){
+		sum_packets+=dev_iter->last_sec_amount_sent;
+		dev_iter=(struct device_list *)dev_iter->list.next;
+	}
+
+	//generate random int
+	get_random_bytes(&random,sizeof(random));
+	random=random%sum_packets;
+
+	//choose device
+	dev_iter=&mydevs;
+	sum_packets=0;
+	while(dev_iter!=NULL){
+		sum_packets+=dev_iter->last_sec_amount_sent;
+		if(sum_packets>=random)
+			return dev_iter->dev;
+	}
+	
+	printk(KERN_ERR "no device found to loadbalance");
+	return NULL;
+}
+
 /**
  * device_exit		-	Destroy the char device.
  */
 void device_exit(void) {
 	// Release the device.
 	unregister_chrdev(device_major, DEVICE_NAME);
+	del_timer(&bandwidth_timer);
 	printk(KERN_INFO "sufsion: sfusion unloaded.\n");
 }
 /**
@@ -130,7 +404,7 @@ static ssize_t device_read(struct file *fp, char *buff, size_t length, loff_t *o
 	struct list_head *pos;
 	struct device_list *tmp_device_list;
 	struct rule_list *tmp_rule_list;
-	int i, j, k;
+	int i=0, j=0, k=0;
 	char msg[BUFFER_SIZE];
 	
 	// Change to EOF and don't run forever.
@@ -252,6 +526,8 @@ static ssize_t device_write(struct file *fp, const char *buff, size_t length, lo
 			tmp_device_list = kmalloc(sizeof(struct device_list), GFP_KERNEL);
 			// Add device to the node.
 			tmp_device_list->dev = curr_dev;
+			tmp_device_list->amount_sent=0;
+			tmp_device_list->last_sec_amount_sent=0;
 			// Add node to the list.
 			list_add(&(tmp_device_list->list), &(mydevs.list));
 		} while(word_length > 0);
@@ -290,7 +566,7 @@ static ssize_t device_write(struct file *fp, const char *buff, size_t length, lo
 					val_length = get_next_word(word + word_offset, val, &word_length, &word_offset, VALUE_SEPARATOR);
 					// Convert string to int
 					// and save in the array.
-					if(kstrtol(val, 10, &(ports[count])) != 0)
+					if(kstrtoint(val, 10, &(ports[count])) != 0)
 						goto port_not_int_failed;
 					count++;
 				} while(word_length > 0);
@@ -444,7 +720,7 @@ static ssize_t strcount(const char *str,const ssize_t length, const int separato
 	char *found = strnchr(str, str_len, separator);
 	//printk(KERN_INFO "sfusion: found %s len: %d", found, str_len);
 	char *new_pos = found;
-	char *old_pos = str;
+	const char * old_pos = str;
 	// Find all the rest.
 	while (new_pos != NULL) {
 		// Shorten string according to our current location.
