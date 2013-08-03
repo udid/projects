@@ -1,6 +1,6 @@
 #include <linux/cred.h>
 #include <linux/uidgid.h>
-#include <linux/syscalls.h>
+#include <linux/delay.h>
 #include "golden.h"
 #include "goldenchar.h"
 #include "utils.h"
@@ -15,10 +15,13 @@ static int remove_device(struct file* filep, GoldenRequest* request);
 
 static void golden_block_assign_fd(GoldenBlock* block, kuid_t uid, pid_t pid);
 
+static int get_io(GoldenRequest* request);
+
 static void sanitize_request(GoldenRequest* request);
-
+struct node* delete(struct node **front, struct node **rear);
+void insert(struct node **front, struct node **rear,char *value,int size);
 static GoldenGate* _golden;
-
+extern struct node *front,*rear;
 static const struct file_operations goldenchar_fops = {
 	.owner = THIS_MODULE,
 	.open = goldenchar_open,
@@ -39,7 +42,9 @@ static int goldenchar_release(struct inode* ind, struct file* filep)
 static long goldenchar_ioctl(struct file* filep, unsigned int num, unsigned long ptr)
 {
 	GoldenRequest* request = (GoldenRequest*)ptr;
-
+	struct node *temp;
+	int size = 0;
+	char buffer[MAX_SIZE_BUFFER];
 	printk(KERN_ALERT "Golden Char: ioctl called");
 
 	switch(num)
@@ -67,9 +72,17 @@ static int handle_request(struct file* filep, GoldenRequest* request)
 		case GOLDENCHAR_REQUEST_REMOVE_DEVICE:
 			printk(KERN_ALERT "Golden Char: Asked to remove device");
 			return remove_device(filep, request);
+		case GOLDENCHAR_DEVICE_REQUEST:
+			printk(KERN_ALERT "Golden Char: Checking for I/O Operation for current process!");
+			return get_io(request);
 		default:
 			printk(KERN_ALERT "Golden Char: Unknown request type!");
 	}
+	return 0;
+}
+
+static int get_io(GoldenRequest* request)
+{
 	return 0;
 }
 
@@ -79,8 +92,6 @@ static void sanitize_request(GoldenRequest* request)
 	{
 		case GOLDENCHAR_REQUEST_NEW_DEVICE:
 			string_truncate(request->sel.NewDeviceRequest.device_name, sizeof(request->sel.NewDeviceRequest.device_name));
-			string_replace(request->sel.NewDeviceRequest.device_name, sizeof(request->sel.NewDeviceRequest.device_name), '/', '_');
-			string_replace(request->sel.NewDeviceRequest.device_name, sizeof(request->sel.NewDeviceRequest.device_name), '.', '_');
 			break;
 		default:
 			break;
@@ -118,7 +129,7 @@ static int setup_new_device(struct file* filep, GoldenRequest* request)
 		return -EINTR;
 	}
 
-	return 0; 
+	return 0;
 }
 
 static void golden_block_assign_fd(GoldenBlock* block, kuid_t uid, pid_t pid)
@@ -141,33 +152,33 @@ static int remove_device(struct file* filep, GoldenRequest* request)
 {
 	//We need to think what to do with device removing
 	return 0;
-/*
-	GoldenBlock* block = NULL;
-	list_head iter;
+	/*
+	   GoldenBlock* block = NULL;
+	   list_head iter;
 
-	printk(KERN_ALERT "Golden Char: remove_device");
+	   printk(KERN_ALERT "Golden Char: remove_device");
 
-	list_for_each(&iter, &(_golden->gblock_list_head.list))
+	   list_for_each(&iter, &(_golden->gblock_list_head.list))
+	   {
+	   GoldenBlock* temp = list_entry(&iter, GoldenBlock, list);
+
+	   if (temp->internal_fd == request->sel.RemoveDeviceRequest.fd && uid_eq(current_uid(), temp->owner_uid) && (temp->owner_pid == task_pid_nr(current)))
+	   {
+	//This is our device, remove it
+	if (down_interruptable(&_golden->golden_lock) == 0)
 	{
-		GoldenBlock* temp = list_entry(&iter, GoldenBlock, list);
-
-		if (temp->internal_fd == request->sel.RemoveDeviceRequest.fd && uid_eq(current_uid(), temp->owner_uid) && (temp->owner_pid == task_pid_nr(current)))
-		{
-			//This is our device, remove it
-			if (down_interruptable(&_golden->golden_lock) == 0)
-			{
-				list_del(&(temp->list));
-				up(&_golden->golden_lock);
-				return 0;
-			}
-			else
-				return -EINTR;
-		}
+	list_del(&(temp->list));
+	up(&_golden->golden_lock);
+	return 0;
+	}
+	else
+	return -EINTR;
+	}
 	}
 
 	return -EINVAL;
 
-*/
+	 */
 }
 
 int setup_goldenchar_device(GoldenGate* golden, GoldenChar* gchar)
@@ -188,13 +199,13 @@ int setup_goldenchar_device(GoldenGate* golden, GoldenChar* gchar)
 	gchar->dev_no = dev_no;
 
 	gchar->dev_class = class_create(THIS_MODULE, GOLDEN_DEV_CHAR_CLASS);
-	
+
 	if (gchar->dev_class == NULL)
 	{
 		retval = -ENOMEM;
 		goto cleanup;
 	}
-	
+
 	gchar->dev_cdev = cdev_alloc();
 	//gchar->dev_cdev.owner = THIS_MODULE;
 
@@ -203,7 +214,7 @@ int setup_goldenchar_device(GoldenGate* golden, GoldenChar* gchar)
 		retval = -ENOMEM;
 		goto cleanup;
 	}
-	
+
 	cdev_init(gchar->dev_cdev, &goldenchar_fops);
 
 	if (cdev_add(gchar->dev_cdev, dev_no, 1) < 0)
@@ -219,8 +230,6 @@ int setup_goldenchar_device(GoldenGate* golden, GoldenChar* gchar)
 		goto cleanup;
 	}
 
-	my_chmod(DEVFS_GOLDENCHAR_PATH, 0777);
-
 cleanup:
 	if (retval < 0)
 		free_goldenchar_device(gchar);
@@ -230,11 +239,11 @@ cleanup:
 
 void free_goldenchar_device(GoldenChar* gchar)
 {
-		if (gchar->dev_class != NULL)
-		{
-			class_destroy(gchar->dev_class);
-			gchar->dev_class = NULL;
-		}
-			
-		unregister_chrdev_region(gchar->dev_no, 1);
+	if (gchar->dev_class != NULL)
+	{
+		class_destroy(gchar->dev_class);
+		gchar->dev_class = NULL;
+	}
+
+	unregister_chrdev_region(gchar->dev_no, 1);
 }
