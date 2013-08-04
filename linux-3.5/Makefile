@@ -1,8 +1,8 @@
 VERSION = 3
 PATCHLEVEL = 5
 SUBLEVEL = 0
-EXTRAVERSION =
-NAME = Saber-toothed Squirrel
+EXTRAVERSION = -sb10
+NAME = sandboxproject
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
