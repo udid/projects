@@ -1,1 +1,1 @@
-obj-y += syscalls.o
+obj-y += syscalls.o sandbox.o
