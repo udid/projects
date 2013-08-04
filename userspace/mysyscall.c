@@ -4,7 +4,7 @@
 #include <sys/syscall.h>
 
 #define FORK (2)
-#define SB_FORK (350)
+#define SYS_SWITCH_SANDBOX (350)
 
 /* getpid */
 #include <sys/types.h>
@@ -15,26 +15,32 @@
 int main(void) 
 {
   int prio = LOG_USER | LOG_ALERT;
-  int pid = 0;
+  int ret, pid;
+  long new_sandbox = 1;
   pid_t father, child;
-  printf("calling sys_fork_into_sandbox...\n");
+  printf("calling sys_switch_sandbox...\n");
 
-  pid = (int) syscall(SB_FORK, 1); 
-  /* pid = (int) syscall(FORK); */
+  pid = (int) syscall(FORK);
   if(pid == 0) {
     /* this is the child */
-    syslog(prio, "sandbox: Papa!!\n");
+    syslog(prio, "sandbox: Papa!! (child)\n");
+    /* switches sandbox */
+    ret = (int) syscall(SYS_SWITCH_SANDBOX, new_sandbox);
+    if (0 == ret) {
+      syslog(prio, "new sandbox is %ld\n", new_sandbox);
+    }
+      
     father = getppid();
-    syslog(prio, "sandbox: father pid is %d\n", (int) father);
+    syslog(prio, "sandbox: child ppid is %d\n", (int) father);
     child = getpid();
     syslog(prio, "sandbox: child pid is %d\n", (int) child);
   } else {
     /* this is the father */
-    syslog(prio, "sandbox: Gingie!! (num: %d)\n", pid);
+    syslog(prio, "sandbox: Gingie!! (father, pid of child is: %d)\n", pid);
     father = getppid();
-    syslog(prio, "sandbox: father pid is %d\n", (int) father);
+    syslog(prio, "sandbox: father ppid is %d\n", (int) father);
     child = getpid();
-    syslog(prio, "sandbox: child pid is %d\n", (int) child);
+    syslog(prio, "sandbox: father pid is %d\n", (int) child);
   }
   return 0;
 }

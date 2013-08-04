@@ -30,7 +30,7 @@ long sys_clone(unsigned long, unsigned long, void __user *,
 	       void __user *, struct pt_regs *);
 
 /* kernel/sandboxing/syscalls.c */
-asmlinkage long sys_fork_into_sandbox(unsigned long, struct pt_regs *);
+asmlinkage long sys_switch_sandbox(unsigned long);
 
 /* kernel/ldt.c */
 asmlinkage int sys_modify_ldt(int, void __user *, unsigned long);
