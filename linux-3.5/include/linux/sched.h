@@ -1583,6 +1583,7 @@ struct task_struct {
 	struct uprobe_task *utask;
 	int uprobe_srcu_id;
 #endif
+        unsigned long sandbox_id;
 };
 
 /* Future-safe accessor for struct task_struct's cpus_allowed. */
