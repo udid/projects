@@ -3436,10 +3436,7 @@ int handle_pte_fault(struct mm_struct *mm,
 	// Fault Callback Start - starting position, not sure it will still be here...
 	if(phase_shifts_algorithm->fault_callback)
 	{
-		if(phase_shifts_algorithm->fault_callback(mm, vma, address, pte, pmd, flags))
-		{
-			return 0;
-		}
+		phase_shifts_algorithm->fault_callback(mm, vma, address, pte, pmd, flags);
 	}
 	// Fault Callback End.
 	

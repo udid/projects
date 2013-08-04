@@ -15,23 +15,30 @@
 
 MODULE_LICENSE("Dual BSD/GPL");
 
-static uid_t WATCHED_USER = (uid_t) 2013;
+#define WATCHED_USER ((uid_t)2013)
+#define HASH_SIZE 16
 
-static unsigned long HASH_SIZE = 16;
-static unsigned long LOCALITY_SIZE = 16;
+static unsigned long LOCALITY_SIZE = 32;
 
-/** Function that extracts the page number out of an address.
+/** get_page_number that extracts the page number out of an address.
  * @address - address from which we would like to extract page number.
  */
 static inline unsigned long get_page_number(unsigned long address)
 {
 	return address >> PAGE_SHIFT;
 }
+/**  pn_to_address returns the address in the page pn with offset 0x0 (That is, 0xPN000 for 32bit).
+ *
+ */ 
 static inline unsigned long pn_to_addr(unsigned long pn)
 {
 	return pn << PAGE_SHIFT;
 }
-/** Function follows an address to get pte. It also gives you the lock for it, and locks it. 
+/** Function follows an address to get pte. It also returns the page table lock , and locks it. 
+ * @mm - memory descriptor.
+ * @address - address that its mapping pte is looked for.
+ * @ptepp - pointer to pointer to pte, in order to return pte_t*.
+ * @ptlp - pointer to pointer to spinlock, in order to return spinlock_t*.
  */
 static int follow_pte(struct mm_struct *mm, unsigned long address,
 		pte_t **ptepp, spinlock_t **ptlp)
@@ -52,8 +59,8 @@ static int follow_pte(struct mm_struct *mm, unsigned long address,
 	pmd = pmd_offset(pud, address);
 	if (pmd_none(*pmd) || unlikely(pmd_bad(*pmd)))
 		goto out;
-
-	/* We cannot handle huge page PFN maps. Luckily they don't exist. */
+		
+	/* Might need to check something regarding huge pmd, or something like that...*/
 
 	ptep = pte_offset_map_lock(mm, pmd, address, ptlp);
 	if (!ptep)
@@ -67,6 +74,7 @@ unlock:
 out:
 	return -EINVAL;
 }
+
 /** swap_out_page() removes a page from our locality list. It does it by clearing the User/Supervisor flag, thus a next reference would cause a page fault.
  * @page - page that is being "swapp
  * @mm - mm of the original process.
@@ -84,7 +92,10 @@ static void swap_out_page(struct locality_page* page, struct mm_struct* mm)
 	set_pte(ptep, entry);
 	pte_unmap_unlock(ptep, ptl);
 }
-
+/** alloc_locality_page() returns a locality_page* struct free for use. It assumes that there are still free locality_pages in the cache.
+ * @scheme - phase shift detection scheme that is used.
+ * @address - address that the locality page would be initialized with its page.
+ */ 
 static struct locality_page* alloc_locality_page(struct phase_shift_detection_scheme* scheme, unsigned long address)
 {
 	struct locality_page* page = &scheme->pool[scheme->free_index];
@@ -95,6 +106,9 @@ static struct locality_page* alloc_locality_page(struct phase_shift_detection_sc
 	
 	return page;
 }
+/** phase_shifts_data_init() initializes a scheme structure with initial values and empty locality list and such.
+ * @scheme - scheme structure.
+ */ 
 static void phase_shifts_data_init (struct phase_shift_detection_scheme* scheme)
 {
 	scheme->locality_hash_tbl = alloc_hash(HASH_SIZE);
@@ -109,14 +123,18 @@ static void phase_shifts_data_init (struct phase_shift_detection_scheme* scheme)
 	scheme->number_of_ticks = 0;
 	
 }
+/** free_phase_shifts_data() frees all data of a scheme structure and the scheme itself.
+ */ 
 static void free_phase_shifts_data (struct phase_shift_detection_scheme* scheme)
 {
-	// This function also removes the locality pages themselves, thus removing the locality list.
-	free_hash_list(scheme->locality_hash_tbl, scheme->hash_table_size);
+	// Free the hash list, cache pool of locality pages and the scheme structure.
+	free_hash_list(scheme->locality_hash_tbl);
 	kfree(scheme->pool);
 	kfree(scheme);
 }
-
+/** Exit callback for our algorithm. It frees the scheme data and logs the end of execution for the process.
+ * @p - process that is to be destroyed.
+ */
 static void exit_callback (struct task_struct* p)
 {
 	char buff[TASK_COMM_LEN];
@@ -127,6 +145,9 @@ static void exit_callback (struct task_struct* p)
 		printk( KERN_ALERT "%s[%d]: execution has ended. \n", get_task_comm(buff, p), task_pid_nr(p) );
 	}
 }
+/** Exec callback for our algorithm. It initializes the scheme structure, only if the process executed owner is the watched user.
+ * It also logs that a process is now being watched for page faults.
+ */ 
 static void exec_callback(struct task_struct* p)
 {
 	struct phase_shift_detection_scheme* data;
@@ -140,10 +161,14 @@ static void exec_callback(struct task_struct* p)
 			free_phase_shifts_data(p->phase_shifts_private_data);
 		}
 		p->phase_shifts_private_data = (void*) data;
-		printk( KERN_ALERT "%s[%d]: execution has begun. \n", get_task_comm(buff, p), task_pid_nr(p) );
+		printk( KERN_ALERT "%s[%d]: execution has begun. Locality size is %lu\n", get_task_comm(buff, p), task_pid_nr(p), data->locality_max_size);
 	}
 }
-
+/** add_this_page() is called whenever the page fault handler callback detects that a page should be added to the locality list.
+ * @mm - memory descriptor.
+ * @address - address within the page.
+ * @scheme - phase shift detection scheme.
+ */ 
 static void add_this_page(struct mm_struct* mm, unsigned long address, struct phase_shift_detection_scheme* scheme)
 {
 	
@@ -154,7 +179,6 @@ static void add_this_page(struct mm_struct* mm, unsigned long address, struct ph
 	page = hash_find(scheme->locality_hash_tbl, scheme->hash_table_size, get_page_number(address));
 	if(page) // If page already in lists.
 	{
-		//printk(KERN_ALERT "DOES THIS EVEN HAPPEN?\n");
 		// Moves the element to the head (new references would cause it to move back to head of locality list.
 		list_del_init(&page->locality_list);
 		list_add(&page->locality_list, &scheme->locality_list);
@@ -165,7 +189,6 @@ static void add_this_page(struct mm_struct* mm, unsigned long address, struct ph
 		{
 			/* Getting the page to be "swapped out". */
 			page = list_entry(scheme->locality_list.prev, struct locality_page, locality_list); 
-			/* Deletes swapped out page to */
 			list_del_init(&page->locality_list);
 			hlist_del_init(&page->hash_list);
 			
@@ -194,7 +217,8 @@ static void add_this_page(struct mm_struct* mm, unsigned long address, struct ph
 }
 
 /**
- * Page fault handler callback. From where its called, its safe to assume that the user has access rights to it.
+ * Page fault handler callback. From where its called, its safe to assume that the user has access rights to it. 
+ * It checks if the faulting page should be added to our locality list.
  */
 static int fault_callback (struct mm_struct *mm,
 		     struct vm_area_struct *vma, unsigned long address,
@@ -202,27 +226,25 @@ static int fault_callback (struct mm_struct *mm,
 {
 	struct phase_shift_detection_scheme* scheme = current->phase_shifts_private_data;
 	pte_t entry;
-	int fix_pte = 0;
 	spinlock_t* ptl;
 	if(scheme)
 	{
 		entry = *pte;
 		
 		
-		if( !pte_present(entry) && (vma->vm_flags & VM_EXEC)) // Page not in memory, and the memory region is executable - 1st case. 
-			// Fault was read, page is present in memory, and area is executable.
+		if( !pte_present(entry) && (vma->vm_flags & VM_EXEC)) /* Page not in memory, and the memory region is executable - 1st case. */
 		{
 			add_this_page(mm, address, scheme);
 			return 0;
 		}
-		if(pte_flags(entry) & _PAGE_USER) // Not our fault...
+		if(pte_flags(entry) & _PAGE_USER) /* Doesn't handle faults that are set with User/Supervisor. */
 			return 0;
 			
-		if(pte_present(entry) && (vma->vm_flags & VM_EXEC) && (!(flags & FAULT_FLAG_WRITE)))
+		if(pte_present(entry) && (vma->vm_flags & VM_EXEC) && (!(flags & FAULT_FLAG_WRITE))) /* Page in memory, area is executable and operation was read - 2nd case. */
 		{
-			fix_pte = 0;
 			add_this_page(mm, address, scheme);
 
+			/* Swapping that page we swapt out back in. It is done by setting the User/Supervisor flag back. */
 			ptl = pte_lockptr(mm, pmd);
 			spin_lock(ptl);
 			entry = *pte;
@@ -231,15 +253,16 @@ static int fault_callback (struct mm_struct *mm,
 			spin_unlock(ptl);
 			return 0;
 		}
-		return 0;
 	}
 	return 0;
 }
 
 
-/**
- * Timer callback. Tested and doesn't crash atm.
- */
+/** Timer callback. Basically, it identifies whether phase shifts occur. It can either log the rate of page faults each tick, or 
+ * log whenever a phase shift occurs.
+ * @p - process that was ticked.
+ * @user_tick flag whether the tick was a user tick.
+ */ 
 static void timer_callback (struct task_struct* p, int user_tick)
 {	
 	struct phase_shift_detection_scheme* scheme = (struct phase_shift_detection_scheme*) p->phase_shifts_private_data;
@@ -247,7 +270,8 @@ static void timer_callback (struct task_struct* p, int user_tick)
 	// Check if a scheme on this process is well defined, and tick was user time.
 	int detected = 0;
 	int current_faults;
-	if(scheme)
+	
+	if(scheme && user_tick)
 	{
 
 		current_faults = atomic_xchg(&scheme->current_tick_faults, 0);
@@ -259,17 +283,23 @@ static void timer_callback (struct task_struct* p, int user_tick)
 		
 		// Resetting counters. 
 		scheme->previous_tick_faults = current_faults;
-		
 		scheme->number_of_ticks++;
-		// Used for monitoring purposes...
-		printk(KERN_ALERT "%lu,%d\n", scheme->number_of_ticks, scheme->previous_tick_faults);
+		
+		printk(KERN_ALERT "[%d] tick: %lu,%d\n", task_pid_nr(p), scheme->number_of_ticks, scheme->previous_tick_faults);
 		if(detected)
 		{
-			//printk( KERN_ALERT "%s[%d]: phase shift detected. \n", get_task_comm(buff, p), task_pid_nr(p) );
+			printk( KERN_ALERT "[%d] shift: %lu,%d\n", task_pid_nr(p), scheme->number_of_ticks, 1 );
+		}
+		else
+		{
+			printk( KERN_ALERT "[%d] shift: %lu,%d\n", task_pid_nr(p), scheme->number_of_ticks, 0 );
 		}
 	}
 }
 
+/**
+ * phase_shifts_init() is the module init function. Initializes callbacks.
+ */ 
 static int phase_shifts_init(void)
 {
 	// Init callbacks.
@@ -281,7 +311,9 @@ static int phase_shifts_init(void)
 	printk(KERN_ALERT "Phase shifts detection algorithm activated. \n");
 	return 0;
 }
-
+/**
+ * phase_shifts_exit() is the module exit function. Removes callbacks.
+ */ 
 static void phase_shifts_exit(void)
 {
 	// Deactivate callbacks.

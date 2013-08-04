@@ -56,25 +56,11 @@ static inline void hash_del(struct locality_page* page)
 {
 	hlist_del(&page->hash_list);
 }
-/** Frees the memory used by the hash table, and frees all struct locality_page* structures. 
- ** It also removes each of the struct locality_page* from list of locality, thus also removing the list.
+/** Frees the memory used by the hash table.
  * @hash_tbl - hash table.
- * @hash_size - the hash table's size.
  */ 
-static inline void free_hash_list(struct hlist_head* hash_tbl, unsigned long hash_size)
+static inline void free_hash_list(struct hlist_head* hash_tbl)
 {
-	//unsigned long i;
-	//struct hlist_node* tmp;
-	//struct hlist_node* ptr;
-	//struct locality_page* page;
-	//for(i = 0UL; i < hash_size; i++)
-	//{
-		//hlist_for_each_entry_safe(page, ptr, tmp, &hash_tbl[i], hash_list)
-		//{
-			//hlist_del(&page->hash_list);
-			//list_del(&page->locality_list);
-		//}
-	//}
 	kfree(hash_tbl);
 }
 
