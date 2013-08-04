@@ -31,6 +31,7 @@ long sys_clone(unsigned long, unsigned long, void __user *,
 
 /* kernel/sandboxing/syscalls.c */
 asmlinkage long sys_switch_sandbox(unsigned long);
+asmlinkage long sys_get_sandbox_id(void);
 
 /* kernel/ldt.c */
 asmlinkage int sys_modify_ldt(int, void __user *, unsigned long);
