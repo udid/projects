@@ -3,6 +3,10 @@
 
 static struct sandbox_algorithm_ops ops = {
   .enter_callback = NULL,
+  .syscall_callback = NULL,
+  .open_callback = NULL,
+  .connect_callback = NULL,
+  .bind_callback = NULL,
 };
 
 struct sandbox_algorithm_ops * sandbox_algorithm = &ops;

@@ -22,6 +22,18 @@ struct sandbox_algorithm_ops {
      the sandbox mechanism then decides whether to allow or block the syscall.
   */
   int (*syscall_callback) (int syscall_num);
+
+  /* this handler is called when the user process attempts to open a file.
+  */
+  int (*open_callback) (const char * __user filename);
+
+  /* this handler is called when the user process attempts invoke connect.
+  */
+  int (*connect_callback) (void);
+
+  /* this handler is called when the user process attempts invoke bind.
+  */
+  int (*bind_callback) (void);
 };
 
 extern struct sandbox_algorithm_ops * sandbox_algorithm;
