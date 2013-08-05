@@ -27,7 +27,7 @@ SYSCALL_DEFINE1(switch_sandbox, unsigned long, sandbox_id)
 
   /* first, enter_callback() strips the task from unwarrented resources */
   if (sandbox_algorithm->enter_callback) {
-    ret = sandbox_algorithm->enter_callback(current, sandbox_id);
+    ret = sandbox_algorithm->enter_callback(sandbox_id);
   }
   
   return ret;

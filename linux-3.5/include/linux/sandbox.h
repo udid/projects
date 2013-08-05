@@ -16,7 +16,7 @@ struct sandbox_algorithm_ops {
      this function should close open resources and leave open only allowed
      resources according to the sandbox configuration. 
   */
-  int (*enter_callback) (struct task_struct * t, unsigned long sandbox_id);
+  int (*enter_callback) (unsigned long sandbox_id);
 
   /* this handler is called when the user process invokes a system call.
      the sandbox mechanism then decides whether to allow or block the syscall.
