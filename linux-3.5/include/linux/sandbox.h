@@ -2,26 +2,31 @@
 #define _LINUX_SANDBOX
 
 #include <linux/kernel.h>
-#include <linux/bitops.h>
-#include <linux/types.h>
+#include <linux/sched.h>
 
-#define current_sandbox (sandbox_list[current->sandbox_id])
+#define NUM_SANDBOXES 10
+#define BLOCK_SYSCALL 1
+#define SYSCALL_OK 0
 
-/* temp */
-#define NUM_OF_SYSCALLS 350
-
-struct sandbox_class {
-  /* 
-     this bitmap disallows certain syscalls from running.
-     if the bit syscalls[SYSCALL_NUM] == 1 then 
-     the system call identified by SYSCALL_NUM is disabled.
+/* holds the sandbox module event handlers */
+struct sandbox_algorithm_ops {
+  /* this handler is called when the user process calls
+     sys_switch_sandbox in order to run in a sandboxed environment.
+     
+     this function should close open resources and leave open only allowed
+     resources according to the sandbox configuration. 
   */
-  DECLARE_BITMAP(syscalls, NUM_OF_SYSCALLS);
+  int (*enter_callback) (struct task_struct * t, unsigned long sandbox_id);
+
+  /* this handler is called when the user process invokes a system call.
+     the sandbox mechanism then decides whether to allow or block the syscall.
+  */
+  int (*syscall_callback) (int syscall_num);
 };
 
-/* exported to the kernel */
-extern struct sandbox_class * sandbox_list;
-extern void init_sandbox_list(void);
+extern struct sandbox_algorithm_ops * sandbox_algorithm;
+
+/* exported functions */
 extern asmlinkage int sandbox_block_syscall(int syscall_num);
 
 #endif /* _LINUX_SANDBOX */

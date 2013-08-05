@@ -68,7 +68,6 @@
 #include <linux/shmem_fs.h>
 #include <linux/slab.h>
 #include <linux/perf_event.h>
-#include <linux/sandbox.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -625,7 +624,6 @@ asmlinkage void __init start_kernel(void)
 	cpuset_init();
 	taskstats_init_early();
 	delayacct_init();
-	init_sandbox_list();
 
 	check_bugs();
 

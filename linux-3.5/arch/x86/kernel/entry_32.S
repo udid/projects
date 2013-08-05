@@ -499,11 +499,11 @@ ENTRY(system_call)
 syscall_call:
 
 	# sandbox patch start
-	pushl %eax      # parameter to sandbox_block_syscall: syscall number
-	call sandbox_block_syscall  # sandbox leech point on syscalls
+	pushl %eax      		# parameter to sandbox_block_syscall: syscall number
+	call sandbox_block_syscall  	# sandbox leech point on syscalls
 	testl %eax, %eax
-	jnz syscall_blocked    # sandbox_block_syscall returned BLOCK_SYSCALL
-	popl %eax      # restore the stack to the way it was before
+	jnz syscall_blocked    		# sandbox_block_syscall returned BLOCK_SYSCALL
+	popl %eax      			# restore the stack to the way it was before
         # sandbox patch end
 	
 	call *sys_call_table(,%eax,4)
