@@ -62,24 +62,45 @@ void _strip_files(void)
   }
 }
 
+
+static int _compare_entries(struct file_exception * entry, 
+			    const char * filename, __kernel_size_t len)
+{
+  if (len != entry->len) {
+    return (int)false;
+  }
+    
+  /* filename lengths are equal */
+  if (0 == strncmp(filename, entry->filename, len)) {
+    return (int)true;
+  }
+
+  return (int)false;
+}
+
 static int find_file(struct sandbox_class * sandbox, const char * filename)
 {
-  struct list_head * tmp = NULL;
+  struct list_head * tmp;
   struct file_exception * entry = NULL;
   __kernel_size_t len = strnlen(filename, PATH_MAX);
-
+  
+  if (NULL == sandbox->file_list) {
+    printk(KERN_DEBUG "sandbox->file_list is empty\n");
+    return (int)false;
+  }
+  
+  /* first member */
+  entry = sandbox->file_list;
+  if (_compare_entries(entry, filename, len)) {
+    return (int)true;
+  }
+  
   list_for_each(tmp, &sandbox->file_list->list) {
     entry = list_entry(tmp, struct file_exception, list);
-    if (len != entry->len) {
-      continue;
-    }
-    
-    /* filename lengths are equal */
-    if (0 == strncmp(filename, entry->filename, len)) {
+    if (_compare_entries(entry, filename, len)) {
       return (int)true;
     }
   }
-  
   return (int)false;
 }
 
@@ -97,7 +118,7 @@ static int sandbox_enter(unsigned long sandbox_id)
   struct sandbox_class * sandbox = &sandbox_list[sandbox_id];
   
   if (sandbox->strip_files) {
-    printk(KERN_ALERT "doing _strip_files()\n");
+    printk(KERN_DEBUG "doing _strip_files()\n");
     _strip_files();
   }
 
@@ -130,23 +151,24 @@ static int sandbox_syscall(int syscall_num)
 static int sandbox_open(const char * __user filename)
 {
   struct sandbox_class * sandbox = &sandbox_list[current->sandbox_id];
-  bool file_found;
-
-  if (0 == current->sandbox_id) {
-    /* sandbox 0 is not limited */
-    return 0;
-  }
+  bool file_found = false;
+  int retval = 0;
+  
+  printk(KERN_DEBUG "called sandbox_open(%s) in sandbox (%ld)\n", filename, current->sandbox_id);
 
   file_found = (bool) find_file(sandbox, filename);
-  
   if (sandbox->disallow_files_by_default) {
     /* if we disallow files by default, than if the file is NOT found, it is disallowed */
-    return (int) (!file_found);
+    printk(KERN_DEBUG "mode: disallow all but exceptions\n");
+    retval = (int) (file_found);
   } else {
-    /* files are allowed by default, hence if the file is found, we disallow it. */
-    return (int) (file_found);
+    /* files are allowed by default, hence if the file is NOT in the list, we allow it. */
+    printk(KERN_DEBUG "mode: allow all but exceptions\n");
+    retval = (int) (!file_found);
   }
-  return 0; /* never reached */
+  printk(KERN_DEBUG "return value: %d\n", retval);
+
+  return retval;
 }
 
 static int sandbox_connect(void)
@@ -200,13 +222,15 @@ void _clear_pointer(void * ptr)
 /* init_sandbox() should load the data structure
    with the default and most permissive configuration */
 static void init_sandbox(struct sandbox_class * sandbox) {
+  printk(KERN_ALERT "init_sandbox has been called\n");
+
   _clear_pointer(sandbox->fs_root);
   _clear_pointer(sandbox->file_list);
   _clear_pointer(sandbox->ip_list);
 
   sandbox->strip_files = 0;
-  sandbox->disallow_files_by_default = 0;
-  sandbox->disallow_ips_by_default = 0;
+  sandbox->disallow_files_by_default = false;
+  sandbox->disallow_ips_by_default = false;
   
   bitmap_zero(sandbox->syscalls, NUM_OF_SYSCALLS);
 }
@@ -225,6 +249,8 @@ static void init_limited_sandbox(struct sandbox_class * sandbox)
   struct file_exception * file_a = kmalloc(sizeof(struct file_exception), GFP_KERNEL);
   struct file_exception * file_b = kmalloc(sizeof(struct file_exception), GFP_KERNEL);
   struct file_exception * file_c = kmalloc(sizeof(struct file_exception), GFP_KERNEL);
+
+  printk(KERN_ALERT "init_limited_sandbox(1) has been called\n");
   
   sandbox_set_jail(sandbox, jail);
   sandbox_set_strip_files(sandbox, true);
@@ -236,22 +262,25 @@ static void init_limited_sandbox(struct sandbox_class * sandbox)
 
   file_b->filename = (char *) allowed_b;
   file_b->len = ex_file_size;
-  list_add_tail(&file_b->list, &file_a->list);
+  list_add(&file_b->list, &file_a->list);
 
   file_c->filename = (char *) allowed_c;
   file_c->len = ex_file_size;
-  list_add_tail(&file_c->list, &file_a->list);
+  list_add(&file_c->list, &file_a->list);
 
   sandbox->disallow_files_by_default = true;
-} 
+  sandbox->file_list = file_a;
+}
 
 void init_sandbox_list(void) {
   int i = 0;
 
   for(i=0; i < NUM_SANDBOXES; i++) {
+    printk(KERN_ALERT "init_sandbox(%d)\n", i);
     init_sandbox(get_sandbox(i));
   }
   /* temp */
+  printk(KERN_ALERT "init_limited_sandbox(1)\n");
   init_limited_sandbox(get_sandbox(1));
 }
 

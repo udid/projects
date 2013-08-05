@@ -30,6 +30,7 @@
 #include <linux/fs_struct.h>
 #include <linux/ima.h>
 #include <linux/dnotify.h>
+#include <linux/sandbox.h>
 
 #include "internal.h"
 
@@ -1033,11 +1034,13 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	int fd = PTR_ERR(tmp);
 	
 	/* sandbox mechanism callback */
-	if (sandbox_algorithm->open_callback) {
-	  if (!sandbox_algorithm->open_callback(filename)) {
-	    return -EACCES;
+	if (0 != current->sandbox_id) {
+	  if (sandbox_algorithm->open_callback) {
+	    if (!sandbox_algorithm->open_callback(filename)) {
+	      return -EACCES;
+	    }
 	  }
-	}
+
 
 	if (!IS_ERR(tmp)) {
 		fd = get_unused_fd_flags(flags);
