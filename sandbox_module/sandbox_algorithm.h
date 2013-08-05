@@ -10,6 +10,7 @@
 
 struct file_exception {
   char * filename;
+  size_t len;
   struct list_head list;
 };
 
