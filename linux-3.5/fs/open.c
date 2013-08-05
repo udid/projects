@@ -392,6 +392,7 @@ dput_and_out:
 out:
 	return error;
 }
+EXPORT_SYMBOL(sys_chdir);
 
 SYSCALL_DEFINE1(fchdir, unsigned int, fd)
 {
@@ -424,6 +425,11 @@ SYSCALL_DEFINE1(chroot, const char __user *, filename)
 	struct path path;
 	int error;
 
+	/* chroot is not allowed for sandboxed process */
+	if (0 != current->sandbox_id) {
+	    return -EACCES;
+	}
+
 	error = user_path_dir(filename, &path);
 	if (error)
 		goto out;
@@ -446,6 +452,7 @@ dput_and_out:
 out:
 	return error;
 }
+EXPORT_SYMBOL(sys_chroot);
 
 static int chmod_common(struct path *path, umode_t mode)
 {
@@ -1024,6 +1031,13 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	int lookup = build_open_flags(flags, mode, &op);
 	char *tmp = getname(filename);
 	int fd = PTR_ERR(tmp);
+	
+	/* sandbox mechanism callback */
+	if (sandbox_algorithm->open_callback) {
+	  if (!sandbox_algorithm->open_callback(filename)) {
+	    return -EACCES;
+	  }
+	}
 
 	if (!IS_ERR(tmp)) {
 		fd = get_unused_fd_flags(flags);
